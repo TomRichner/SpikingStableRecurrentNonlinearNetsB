@@ -141,6 +141,12 @@ classdef SRNNModelHH < SRNNModelBase
             obj.input_config.no_stim_pattern = false(1, 3);
             obj.input_config.bias           = 0.0;    % constant background current
             obj.input_config.positive_only  = true;
+            % Optional deterministic targeted drive (overrides random steps when
+            % drive_types is non-empty): a rectangular current pulse of drive_amp
+            % applied to all neurons of the given types within drive_window [t_on t_off] ms.
+            obj.input_config.drive_types    = [];     % cell-type indices to drive ([] -> random steps)
+            obj.input_config.drive_window   = [];     % [t_on t_off] ms ([] -> whole run)
+            obj.input_config.drive_amp      = 0.0;    % pulse amplitude (uA/cm^2)
         end
 
         function build_network(obj)
@@ -196,21 +202,34 @@ classdef SRNNModelHH < SRNNModelBase
 
             rng(obj.rng_seeds(2));
             ic = obj.input_config;
-            step_len = max(1, round((T - obj.T_range(1)) / ic.n_steps * obj.fs));
-            if ic.positive_only
-                steps = ic.amp * abs(randn(n, ic.n_steps));
-            else
-                steps = ic.amp * randn(n, ic.n_steps);
-            end
-            steps = steps .* (rand(n, ic.n_steps) < ic.step_density);
-            steps(:, ic.no_stim_pattern) = 0;
-
             u_stim = ic.bias * ones(n, nt);
-            for s = 1:ic.n_steps
-                a0 = (s - 1) * step_len + 1;
-                b0 = min(s * step_len, nt);
-                if a0 > nt, break; end
-                u_stim(:, a0:b0) = u_stim(:, a0:b0) + repmat(steps(:, s), 1, b0 - a0 + 1);
+
+            if isfield(ic, 'drive_types') && ~isempty(ic.drive_types)
+                % Deterministic targeted drive: a rectangular pulse of drive_amp on
+                % all neurons of the requested types within drive_window.
+                driven = ismember(obj.type_of, ic.drive_types);
+                if isempty(ic.drive_window)
+                    win = true(1, nt);
+                else
+                    win = (t_stim' >= ic.drive_window(1)) & (t_stim' < ic.drive_window(2));
+                end
+                u_stim(driven, win) = u_stim(driven, win) + ic.drive_amp;
+            else
+                % Default: sparse random current steps.
+                step_len = max(1, round((T - obj.T_range(1)) / ic.n_steps * obj.fs));
+                if ic.positive_only
+                    steps = ic.amp * abs(randn(n, ic.n_steps));
+                else
+                    steps = ic.amp * randn(n, ic.n_steps);
+                end
+                steps = steps .* (rand(n, ic.n_steps) < ic.step_density);
+                steps(:, ic.no_stim_pattern) = 0;
+                for s = 1:ic.n_steps
+                    a0 = (s - 1) * step_len + 1;
+                    b0 = min(s * step_len, nt);
+                    if a0 > nt, break; end
+                    u_stim(:, a0:b0) = u_stim(:, a0:b0) + repmat(steps(:, s), 1, b0 - a0 + 1);
+                end
             end
 
             obj.t_ex = t_stim;
