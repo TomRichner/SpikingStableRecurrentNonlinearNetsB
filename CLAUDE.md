@@ -1,6 +1,35 @@
 # CLAUDE.md
 
-Guidance for Claude Code when working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+Pure MATLAB (R2025b); no build/compile step, no package manager. The preferred
+way to run code here is the **matlab MCP** tools (`run_matlab_file`,
+`evaluate_matlab_code`, `check_matlab_code`) against a live session launched via
+the `/launch-matlab` skill; `matlab -batch` works headless as a fallback.
+
+```matlab
+run scripts/tests/run_all_tests.m        % run every test_*.m; prints ALL_TESTS_PASS/FAIL
+run scripts/tests/test_benettin.m        % run ONE test (prints its own <NAME>_PASS/FAIL)
+run scripts/examples/demo_hh_network.m   % build+run+plot a network, print the LLE
+```
+Headless single test:
+`matlab -batch "cd('<repo>'); addpath(genpath('src'),genpath('scripts')); run('scripts/tests/test_benettin.m')"`
+
+There is **no unit-test framework** — tests are plain scripts that print a
+grep-able `<NAME>_PASS`/`<NAME>_FAIL` sentinel; success is verified by grepping
+stdout for `_FAIL`. Static-analyze a file with the matlab MCP `check_matlab_code`.
+
+**Path gotcha (important):** the sibling repo `../FractionalResevoir` also has a
+`scripts/setup_paths.m`; if it is on the MATLAB path, `setup_paths` can resolve to
+the WRONG repo and code won't be found. Isolate first when the session is shared:
+```matlab
+repoB = '<abs path to this repo>';
+restoredefaultpath;
+addpath(genpath(fullfile(repoB,'src'))); addpath(genpath(fullfile(repoB,'scripts')));
+cd(repoB);
+```
 
 ## What this repo is
 
@@ -62,31 +91,13 @@ Governing equations: `docs/EquationsParametersDocs/hh_system_equations.md`.
 - **Lyapunov:** only `lya_method='benettin'` is supported. `eval_jacobian` errors
   by design — the event-based (hybrid) QR spectrum would need saltation matrices
   (deferred). Set `obj.lya_dt` explicitly (ms); the base default (0.02) is only
-  meaningful in seconds.
+  meaningful in seconds. The LLE is in 1/ms; `lya_results.LLE_per_s` reports it in
+  1/s (via `time_units_per_second=1000`) for direct comparison with the
+  seconds-based rate model.
 - No `arguments` blocks in constructors (matches FractionalResevoir); public
   property defaults + imperative `validate()` with namespaced error IDs + clamps.
 - `snake_case` properties/vars, `PascalCase` classes, `test_<subject>.m` scripts
   printing a grep-able `<NAME>_PASS`/`<NAME>_FAIL` sentinel.
-
-## Running / testing
-
-There is no formal unit-test framework — tests are plain scripts under
-`scripts/tests/` that print a sentinel. Run all of them with
-`scripts/tests/run_all_tests.m` (prints `ALL_TESTS_PASS`/`ALL_TESTS_FAIL`).
-
-Every entry-point script calls `setup_paths()` first. **Path gotcha:** the sibling
-repo `FractionalResevoir` also has a `scripts/setup_paths.m`; if it is on the
-MATLAB path, `setup_paths` may resolve to the wrong repo. When verifying via the
-MATLAB MCP, first isolate the path:
-```matlab
-repoB = '.../SpikingStableRecurrentNonlinearNetsB';
-restoredefaultpath;
-addpath(genpath(fullfile(repoB,'src'))); addpath(genpath(fullfile(repoB,'scripts')));
-cd(repoB);
-```
-Then `run('scripts/tests/run_all_tests.m')`. A single HH neuron rests quietly with
-no drive and spikes under supra-threshold constant current; verify with
-`scripts/tests/test_single_neuron.m` or the demo `scripts/examples/demo_hh_network.m`.
 
 ## Status / deferred
 
