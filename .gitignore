@@ -1,0 +1,16 @@
+# MATLAB
+*.asv
+*.mex*
+*.mat
+slprj/
+octave-workspace
+
+# Machine-local / generated
+data/
+*.log
+
+# OS
+.DS_Store
+
+# Campagnola convenience artifact (CSVs under src/connectivity/campagnola are the source of truth)
+campagnola_matrices.mat
