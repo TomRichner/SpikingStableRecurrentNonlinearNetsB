@@ -33,13 +33,17 @@ cd(repoB);
 
 ## What this repo is
 
-A spiking Hodgkin–Huxley (HH) recurrent network that reproduces the dynamical
-mechanisms of the continuous rate model `SRNNModelCellTypes` (in the sibling repo
-`../FractionalResevoir`) — spike-frequency adaptation (SFA), short-term synaptic
-depression (STD), and short-term facilitation (STF) — so that **edge-of-chaos**
-results (largest Lyapunov exponent via Benettin's method) can be compared between
-the rate model and a biophysical spiking model. Connectivity and plasticity
-parameters come from Campagnola et al. 2022 (Allen synaptic-physiology dataset).
+Spiking Hodgkin–Huxley (HH) recurrent networks that reproduce the dynamical
+mechanisms of the continuous rate models in the sibling repo `../FractionalResevoir`
+— spike-frequency adaptation (SFA), short-term synaptic depression (STD), and
+short-term facilitation (STF) — so that **edge-of-chaos** results (largest Lyapunov
+exponent via Benettin's method) can be compared between rate and biophysical spiking
+models. There are **two concrete spiking models**, paralleling the two rate models:
+- `SRNNModelHH` ↔ `SRNNModelCellTypes`: 4 Campagnola cell types, data-driven
+  connectivity, per-(pre,post-type) single-timescale STD/STF.
+- `SRNNModelHHEI` ↔ `SRNNModel2`: 2 populations (E/I), RMT/Harris connectivity,
+  per-population multi-timescale SFA (K-current) and STD, no STF.
+Connectivity/plasticity for the cell-type model come from Campagnola et al. 2022.
 
 Related read-only reference repos:
 - `../FractionalResevoir` — the rate model, base-class lifecycle, Benettin/QR
@@ -59,19 +63,27 @@ Handle-class lifecycle mirrored from FractionalResevoir:
   Concrete subclasses implement the abstract hooks: `set_defaults`,
   `build_network`, `build_stimulus`, `validate`, `get_params`,
   `decimate_and_unpack`, `eval_dynamics`, `eval_jacobian`.
-- `src/SRNNModelHH.m` — the concrete spiking model (HH + SFA/STD/STF, Campagnola
-  connectivity, jump-parameter packing, plotting).
-- `src/integrators/integrate_hh_hybrid.m` — event-aware fixed-step RK4. Standalone
-  and unit-testable; the model exposes it via the `run_integrator` seam
-  (`obj.ode_solver`) so both `run()` and the Benettin reshoot apply identical
-  spike jumps.
+- `src/SRNNModelHH.m` — Campagnola cell-type model (HH + SFA/STD/STF, per-(pre,post-type)
+  synaptic resources, Bernoulli+magnitude connectivity, sign via reversal potential).
+- `src/SRNNModelHHEI.m` — E/I RMT model comparable to `SRNNModel2`: `RMTMatrix`
+  connectivity (wrong-sign entries **zeroed**, magnitude + Dale sign via reversal;
+  `indegree`/α is the sparsity knob), **per-population timescale counts**
+  (`n_a_vec`, `n_b_vec` are K-vectors → ragged per-type state blocks), SFA as a
+  K-current with **DC-gain-balanced pools** (increment `Δₗ = a_incr0/τₗ` so logspaced
+  timescales contribute equally, matching the rate model's `aₗ*=r`; `a_incr0=1000/target_rate`),
+  and multi-timescale STD with **product efficacy** (`Πₘ bₘ`), per-spike depletion
+  `bₘ-=p0·bₘ`; STF absent. `p0` maps to the rate model's `τ_rel` at the target rate.
+- `src/integrators/integrate_hh_events.m` — generic event-aware fixed-step RK4
+  (threshold detection + hysteresis); takes a `jump_fn(y,spiked)` closure.
+  `integrate_hh_hybrid.m` (→ `apply_hh_jumps`) and `SRNNModelHHEI` (→ `apply_hhei_jumps`)
+  both drive it, so `run()` and the Benettin reshoot apply identical spike jumps.
 - `src/channels/hh_gating_rates.m`, `hh_gating_inf.m` — Traub–Miles α/β with
   removable-singularity patches, and steady-state gating for initialisation.
-- `src/connectivity/load_campagnola_matrices.m` + `campagnola/` — copied verbatim
-  from FractionalResevoir; the CSVs under `campagnola/` are the version-controlled
-  source of truth.
+- `src/connectivity/` — `load_campagnola_matrices.m` + `campagnola/` CSVs (cell-type
+  model) and `RMTMatrix.m` (E/I model), copied from FractionalResevoir.
 
-Governing equations: `docs/EquationsParametersDocs/hh_system_equations.md`.
+Governing equations: `docs/EquationsParametersDocs/hh_system_equations.md` (cell-type).
+`SRNNModelHHEI` is documented in its class header + the plan/discussion.
 
 ## Key conventions (specific to this codebase)
 
@@ -101,12 +113,16 @@ Governing equations: `docs/EquationsParametersDocs/hh_system_equations.md`.
 
 ## Status / deferred
 
-Core-first pass complete and verified: HH class + SFA/STD/STF + Campagnola
-connectivity + Benettin LLE + tests. Deferred: QR full spectrum (needs jump
-matrices), richer per-type plotting, and a parameter-sweep driver
-(`ParamSpaceAnalysis2` analog) to map edge-of-chaos across `level_of_chaos` and
-mechanism toggles. At the current default biophysical scaling the sampled LLEs are
-negative (stable); locating the edge-of-chaos regime is the intended sweep work.
+Both spiking models complete and verified (`ALL_TESTS_PASS`): `SRNNModelHH`
+(Campagnola) and `SRNNModelHHEI` (E/I RMT) + Benettin LLE + tests + demos. The E/I
+RMT model gives positive LLEs at moderate `level_of_chaos` (chaotic), the Campagnola
+model negative (stable) at default scaling. Deferred: QR full spectrum (needs jump
+matrices); a parameter-sweep driver (`ParamSpaceAnalysis2` analog) to map
+edge-of-chaos across `level_of_chaos`; hand-tuning the E/I operating point
+(`bias`, `c_type`, `p0_type`, `g_syn_scale` at ~5 Hz — formulas in the class header,
+not auto-solved); long-run Benettin over second-scale SFA timescales (the dominant
+cost — the multi-scale ms-spikes / second-adaptation stiffness needs runs of tens of
+seconds; `SRNNModelHHEI` demo/tests use shortened τ for tractability).
 
 ## Commit style
 
