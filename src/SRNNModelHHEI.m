@@ -373,14 +373,20 @@ classdef SRNNModelHHEI < SRNNModelBase
             np = 4 + double(has_lya);
             fig = figure('Color', 'w', 'Name', 'SRNNModelHHEI'); ax = gobjects(np, 1);
             tl = tiledlayout(fig, np, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
-            cmap = lines(obj.n_types);
+            % Excitatory = dark red, inhibitory = blue (consistent across panels).
+            c_exc = [0.55 0.08 0.08];
+            c_inh = [0.15 0.40 0.75];
+            cmap = repmat(c_inh, obj.n_types, 1);
+            cmap(obj.exc_type, :) = repmat(c_exc, nnz(obj.exc_type), 1);
             is_e = obj.exc_type(obj.type_of);
 
             ax(1) = nexttile(tl); hold(ax(1), 'on');
             if ~isempty(pd.spikes)
-                scatter(ax(1), pd.spikes(:, 1), pd.spikes(:, 2), 3, 'k', 'filled');
+                sp_type = pd.type_of(pd.spikes(:, 2));      % type of each spiking neuron
+                scatter(ax(1), pd.spikes(:, 1), pd.spikes(:, 2), 4, cmap(sp_type, :), 'filled');
             end
-            ylabel(ax(1), 'neuron'); ylim(ax(1), [0 obj.n + 1]); title(ax(1), 'raster (E first, then I)');
+            ylabel(ax(1), 'neuron'); ylim(ax(1), [0 obj.n + 1]);
+            title(ax(1), 'raster (excitatory = dark red, inhibitory = blue)');
 
             ax(2) = nexttile(tl); hold(ax(2), 'on');
             ie = find(is_e, 1); ii = find(~is_e, 1);
